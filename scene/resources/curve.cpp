@@ -1170,6 +1170,8 @@ void Curve3D::_bake() const {
 	List<Plane> pointlist;
 	pointlist.push_back(Plane(pos, points[0].tilt));
 
+	
+
 	for (int i = 0; i < points.size() - 1; i++) {
 		float step = 0.1; // at least 10 substeps ought to be enough?
 		float p = 0;
@@ -1277,6 +1279,32 @@ void Curve3D::_bake() const {
 
 		idx++;
 	}
+	
+	//Tilt smoothing, paralell rotation frame does not guarantee that the rotation at the beginning of the curve is equal to that at the end of the curve.
+	//Check out: Wang, W., Juttler, B., Zheng, D., and Liu, Y. 2008. Computation of rotation minimizing frame.
+
+	if(auto_tilts){
+
+	//Calculate tilt angle difference between first and last baked up vector
+	Vector3 first_up = up_write[0];
+	Vector3 last_up = up_write[pointlist.size() - 1];
+	Vector3 tangent = Vector3(0,0,0);
+	
+	for (int i = 0; i < idx;i++) {
+		tangent = (w[0] - w[i]);
+		if(tangent.length_squared() > CMP_EPSILON2) {
+			break;
+		}
+	}
+	tangent=tangent.normalized();
+	float phi= first_up.signed_angle_to(last_up, tangent);
+
+	for (int i = 0; i < idx;i++) {
+		wt[i] += phi * float(i) / float(idx - 1);
+	}
+	}
+		
+	
 }
 
 float Curve3D::get_baked_length() const {
@@ -1540,6 +1568,16 @@ bool Curve3D::is_up_vector_enabled() const {
 	return up_vector_enabled;
 }
 
+void Curve3D::set_auto_tilts(bool p_auto_tilts) {
+	auto_tilts = p_auto_tilts;
+	baked_cache_dirty = true;
+	emit_signal(CoreStringNames::get_singleton()->changed);
+}
+
+bool Curve3D::is_auto_tilts() const {
+	return auto_tilts;
+}
+
 Dictionary Curve3D::_get_data() const {
 	Dictionary dc;
 
@@ -1644,6 +1682,8 @@ void Curve3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_bake_interval"), &Curve3D::get_bake_interval);
 	ClassDB::bind_method(D_METHOD("set_up_vector_enabled", "enable"), &Curve3D::set_up_vector_enabled);
 	ClassDB::bind_method(D_METHOD("is_up_vector_enabled"), &Curve3D::is_up_vector_enabled);
+	ClassDB::bind_method(D_METHOD("set_auto_tilts", "enable"), &Curve3D::set_auto_tilts);
+	ClassDB::bind_method(D_METHOD("is_auto_tilts"), &Curve3D::is_auto_tilts);
 
 	ClassDB::bind_method(D_METHOD("get_baked_length"), &Curve3D::get_baked_length);
 	ClassDB::bind_method(D_METHOD("interpolate_baked", "offset", "cubic"), &Curve3D::interpolate_baked, DEFVAL(false));
@@ -1663,6 +1703,7 @@ void Curve3D::_bind_methods() {
 
 	ADD_GROUP("Up Vector", "up_vector_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "up_vector_enabled"), "set_up_vector_enabled", "is_up_vector_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_tilts"), "set_auto_tilts", "is_auto_tilts");
 }
 
 Curve3D::Curve3D() {
@@ -1673,4 +1714,5 @@ Curve3D::Curve3D() {
 	add_point(Vector3(0,3,5));*/
 	bake_interval = 0.2;
 	up_vector_enabled = true;
+	auto_tilts = true;
 }
